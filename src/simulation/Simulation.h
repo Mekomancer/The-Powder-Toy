@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cstddef>
 #include <vector>
+#include <map>
 #include <array>
 #include <memory>
 
@@ -16,6 +17,7 @@
 #include "BuiltinGOL.h"
 #include "MenuSection.h"
 #include "CoordStack.h"
+#include "Sample.h"
 
 #include "Element.h"
 
@@ -24,7 +26,6 @@
 class Snapshot;
 class SimTool;
 class Brush;
-class SimulationSample;
 struct matrix2d;
 struct vector2d;
 
@@ -53,8 +54,25 @@ public:
 	int replaceModeSelected;
 	int replaceModeFlags;
 
+	// scratch space for stack reordering hacks
+	Particle stackReorderParts[NPART];
+
+	SimulationSample sample;
+	int stackEditDepth;
+	// configToolSample will change the stack sample
+	// but not the pmap sample during UpdateSample
+	bool configToolSampleActive;
+	int configToolSampleX;
+	int configToolSampleY;
+
+	bool stackToolNotifShown;
+	int stackToolNotifShownX;
+	int stackToolNotifShownY;
+
 	char can_move[PT_NUM][PT_NUM];
 	int debug_currentParticle;
+	bool debug_interestingChangeOccurred;
+	bool needReloadParticleOrder;
 	int parts_lastActiveIndex;
 	int pfree;
 	int NUM_PARTS;
@@ -108,8 +126,10 @@ public:
 	int legacy_enable;
 	int aheat_enable;
 	int water_equal_test;
+	bool subframe_mode;
 	int sys_pause;
 	int framerender;
+	int subframe_framerender;
 	int pretty_powder;
 	int sandcolour;
 	int sandcolour_frame;
@@ -120,7 +140,8 @@ public:
 	GameSave * Save(bool includePressure);
 	GameSave * Save(bool includePressure, int x1, int y1, int x2, int y2);
 	void SaveSimOptions(GameSave * gameSave);
-	SimulationSample GetSample(int x, int y);
+	void UpdateSample(int x, int y);
+	int GetStackEditPartId(); // returns -1 if no particles exist in sample
 
 	std::unique_ptr<Snapshot> CreateSnapshot();
 	void Restore(const Snapshot &snap);
@@ -160,9 +181,19 @@ public:
 	void set_emap(int x, int y);
 	int parts_avg(int ci, int ni, int t);
 	void create_arc(int sx, int sy, int dx, int dy, int midpoints, int variance, int type, int flags);
+	bool AreParticlesInSubframeOrder();
+	void CompleteDebugUpdateParticles();
 	void UpdateParticles(int start, int end);
 	void SimulateGoL();
 	void RecalcFreeParticles(bool do_life_dec);
+	void FixSoapLinks(std::map<unsigned int, unsigned int> &soapList);
+	void ReloadParticleOrder();
+	// run BeforeStackEdit before drawing to target the stack edit depth;
+	// run AfterStackEdit when done
+	// (don't rely on autoreload since pmap and photons are corrupted)
+	void BeforeStackEdit();
+	void AfterStackEdit();
+	int GetStackEditParticleId(int x, int y);
 	void CheckStacking();
 	void BeforeSim();
 	void AfterSim();

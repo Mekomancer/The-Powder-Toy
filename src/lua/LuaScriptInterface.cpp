@@ -209,12 +209,15 @@ LuaScriptInterface::LuaScriptInterface(GameController * c, GameModel * m):
 		{"heat", &luatpt_heat},
 		{"setfire", &luatpt_setfire},
 		{"setdebug", &luatpt_setdebug},
+		{"autoreload_enable", &luatpt_autoreload_enable},
 		{"setfpscap",&luatpt_setfpscap},
 		{"getscript",&luatpt_getscript},
 		{"setwindowsize",&luatpt_setwindowsize},
 		{"watertest",&luatpt_togglewater},
 		{"screenshot",&luatpt_screenshot},
 		{"record",&luatpt_record},
+		{"record_subframe",&luatpt_record_subframe},
+		{"setrecordinterval",&luatpt_setrecordinterval},
 		{"element",&luatpt_getelement},
 		{"element_func",&luatpt_element_func},
 		{"graphics_func",&luatpt_graphics_func},
@@ -222,6 +225,7 @@ LuaScriptInterface::LuaScriptInterface(GameController * c, GameModel * m):
 		{"set_clipboard", &platform_clipboardPaste},
 		{"setdrawcap", &luatpt_setdrawcap},
 		{"perfectCircleBrush", &luatpt_perfectCircle},
+		{"set_bray_life_brightness_threshold", &luatpt_set_bray_life_brightness_threshold},
 		{NULL,NULL}
 	};
 
@@ -862,6 +866,7 @@ void LuaScriptInterface::initSimulationAPI()
 		{"listCustomGol", simulation_listCustomGol},
 		{"addCustomGol", simulation_addCustomGol},
 		{"removeCustomGol", simulation_removeCustomGol},
+		{"reloadParticleOrder", simulation_reloadParticleOrder},
 		{NULL, NULL}
 	};
 	luaL_register(l, "simulation", simulationAPIMethods);
@@ -2352,6 +2357,12 @@ int LuaScriptInterface::simulation_removeCustomGol(lua_State *l)
 	return 1;
 }
 
+int LuaScriptInterface::simulation_reloadParticleOrder(lua_State * l)
+{
+	luacon_controller->ReloadParticleOrder();
+	return 0;
+}
+
 //// Begin Renderer API
 
 void LuaScriptInterface::initRendererAPI()
@@ -2445,6 +2456,7 @@ int LuaScriptInterface::renderer_renderModes(lua_State * l)
 			lua_pop(l, 1);
 		}
 		luacon_ren->SetRenderMode(renderModes);
+		luacon_controller->ReRenderSave();
 		return 0;
 	}
 	else
@@ -2478,6 +2490,7 @@ int LuaScriptInterface::renderer_displayModes(lua_State * l)
 			lua_pop(l, 1);
 		}
 		luacon_ren->SetDisplayMode(displayModes);
+		luacon_controller->ReRenderSave();
 		return 0;
 	}
 	else
@@ -2501,6 +2514,7 @@ int LuaScriptInterface::renderer_colourMode(lua_State * l)
 	{
 		luaL_checktype(l, 1, LUA_TNUMBER);
 		luacon_ren->SetColourMode(lua_tointeger(l, 1));
+		luacon_controller->ReRenderSave();
 		return 0;
 	}
 	else
@@ -2516,6 +2530,7 @@ int LuaScriptInterface::renderer_decorations(lua_State * l)
 	if(args)
 	{
 		luacon_ren->decorations_enable = lua_toboolean(l, 1);
+		luacon_controller->ReRenderSave();
 		return 0;
 	}
 	else

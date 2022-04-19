@@ -122,6 +122,7 @@ int luatpt_heat(lua_State* l);
 int luatpt_cmode_set(lua_State* l);
 int luatpt_setfire(lua_State* l);
 int luatpt_setdebug(lua_State* l);
+int luatpt_autoreload_enable(lua_State* l);
 
 int luatpt_setfpscap(lua_State* l);
 int luatpt_setdrawcap(lua_State* l);
@@ -132,7 +133,11 @@ int luatpt_setwindowsize(lua_State* l);
 
 int luatpt_screenshot(lua_State* l);
 int luatpt_record(lua_State* l);
+int luatpt_record_subframe(lua_State* l);
+int luatpt_setrecordinterval(lua_State* l);
 
 int luatpt_perfectCircle(lua_State* l);
+
+int luatpt_set_bray_life_brightness_threshold(lua_State* l);
 
 #endif /* LUASCRIPTHELPER_H_ */

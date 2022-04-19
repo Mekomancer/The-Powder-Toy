@@ -5,7 +5,6 @@
 #include <deque>
 #include "common/String.h"
 #include "gui/interface/Window.h"
-#include "simulation/Sample.h"
 
 enum DrawMode
 {
@@ -15,6 +14,11 @@ enum DrawMode
 enum SelectMode
 {
 	SelectNone, SelectStamp, SelectCopy, SelectCut, PlaceSave
+};
+
+enum HudParticleTextGlowType
+{
+	NONE, YELLOW, BLUE
 };
 
 namespace ui
@@ -48,6 +52,7 @@ private:
 	bool showHud;
 	bool showBrush;
 	bool showDebug;
+	int wavelengthGfxMode;
 	int delayedActiveMenu;
 	bool wallBrush;
 	bool toolBrush;
@@ -55,7 +60,6 @@ private:
 	bool windTool;
 	int toolIndex;
 	int currentSaveType;
-	int lastMenu;
 
 	int toolTipPresence;
 	String toolTip;
@@ -73,6 +77,9 @@ private:
 	int screenshotIndex;
 	bool recording;
 	int recordingFolder;
+	bool recordingSubframe;
+	int recordInterval;
+	int recordIntervalIndex;
 
 	ui::Point currentPoint, lastPoint;
 	GameController * c;
@@ -118,13 +125,13 @@ private:
 	VideoBuffer * placeSaveThumb;
 	ui::Point placeSaveOffset;
 
-	SimulationSample sample;
-
 	void updateToolButtonScroll();
 
 	void SetSaveButtonTooltips();
 
 	void screenshot();
+
+	void drawHudParticleText(Graphics *g, StringBuilder text, int yoffset, int alpha, int wavelengthGfx = 0, HudParticleTextGlowType glowType = HudParticleTextGlowType::NONE);
 
 	void enableShiftBehaviour();
 	void disableShiftBehaviour();
@@ -134,13 +141,14 @@ private:
 	void disableAltBehaviour();
 	void UpdateDrawMode();
 	void UpdateToolStrength();
+
+	void writeWavelength(StringBuilder *str, int wavelengthGfx);
 public:
 	GameView();
 	virtual ~GameView();
 
 	//Breaks MVC, but any other way is going to be more of a mess.
 	ui::Point GetMousePosition();
-	void SetSample(SimulationSample sample);
 	void SetHudEnable(bool hudState);
 	bool GetHudEnable();
 	void SetBrushEnable(bool hudState);
@@ -149,6 +157,7 @@ public:
 	bool GetDebugHUD();
 	bool GetPlacingSave();
 	bool GetPlacingZoom();
+	void ToggleStackMode();
 	void SetActiveMenuDelayed(int activeMenu) { delayedActiveMenu = activeMenu; }
 	bool CtrlBehaviour(){ return ctrlBehaviour; }
 	bool ShiftBehaviour(){ return shiftBehaviour; }
@@ -157,7 +166,10 @@ public:
 	void BeginStampSelection();
 	ui::Point GetPlaceSaveOffset() { return placeSaveOffset; }
 	void SetPlaceSaveOffset(ui::Point offset) { placeSaveOffset = offset; }
-	int Record(bool record);
+	int Record(bool record, bool subframe = false);
+	bool GetRecordingSubframe(){ return recordingSubframe; }
+	int GetRecordInterval() { return recordInterval; }
+	void SetRecordInterval(int val) { recordInterval = val; }
 
 	//all of these are only here for one debug lines
 	bool GetMouseDown() { return isMouseDown; }
@@ -172,6 +184,7 @@ public:
 	void NotifyRendererChanged(GameModel * sender);
 	void NotifySimulationChanged(GameModel * sender);
 	void NotifyPausedChanged(GameModel * sender);
+	void NotifyDecorationChanged(GameModel * sender);
 	void NotifySaveChanged(GameModel * sender);
 	void NotifyBrushChanged(GameModel * sender);
 	void NotifyMenuListChanged(GameModel * sender);

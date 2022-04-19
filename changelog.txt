@@ -1,3 +1,5 @@
-# This file is used by the starcatcher.us update server to pull changelogs for mod releases
-# Erase and replace the changelog for every release, do not just append changes to the end
-# Lines starting with # and empty lines are ignored
+v1.13:
+- Fix automatic particle order reloading initialization bug.
+- Prevent Alt-F from skipping uninteresting updates.
+- Add Lua hook to set BRAY life brightness threshold.
+- Make stamp previews aware of render settings.

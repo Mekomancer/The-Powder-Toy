@@ -1303,6 +1303,19 @@ int luatpt_setdebug(lua_State* l)
 	return 0;
 }
 
+int luatpt_autoreload_enable(lua_State* l)
+{
+	int acount = lua_gettop(l);
+	if (acount == 0)
+	{
+		lua_pushinteger(l, luacon_controller->GetAutoreloadEnabled());
+		return 1;
+	}
+	int autoreloadstate = luaL_checkint(l, 1);
+	luacon_controller->SetAutoreloadEnabled(autoreloadstate==1);
+	return 0;
+}
+
 int luatpt_setfpscap(lua_State* l)
 {
 	int acount = lua_gettop(l);
@@ -1469,6 +1482,44 @@ int luatpt_perfectCircle(lua_State* l)
 	}
 	luaL_checktype(l, 1, LUA_TBOOLEAN);
 	luacon_model->SetPerfectCircle(lua_toboolean(l, 1));
+	return 0;
+}
+
+int luatpt_record_subframe(lua_State* l)
+{
+	if (!lua_isboolean(l, -1))
+		return luaL_typerror(l, 1, lua_typename(l, LUA_TBOOLEAN));
+	bool record = lua_toboolean(l, -1);
+	int recordingFolder = luacon_controller->Record(record, true);
+	lua_pushinteger(l, recordingFolder);
+	return 1;
+}
+
+int luatpt_setrecordinterval(lua_State* l)
+{
+	int acount = lua_gettop(l);
+	if (acount == 0)
+	{
+		lua_pushinteger(l, luacon_controller->GetRecordInterval());
+		return 1;
+	}
+	int recordinterval = luaL_checkint(l, 1);
+	if (recordinterval < 1)
+		return luaL_error(l, "record interval too small");
+	luacon_controller->SetRecordInterval(recordinterval);
+	return 0;
+}
+
+int luatpt_set_bray_life_brightness_threshold(lua_State* l)
+{
+	int acount = lua_gettop(l);
+	if (acount == 0)
+	{
+		lua_pushinteger(l, luacon_ren->bray_life_brightness_threshold);
+		return 1;
+	}
+	int thres = luaL_checkint(l, 1);
+	luacon_ren->bray_life_brightness_threshold = thres;
 	return 0;
 }
 

@@ -1,6 +1,7 @@
 #ifndef GAMEMODEL_H
 #define GAMEMODEL_H
 #include "Config.h"
+#include "simulation/SimulationData.h"
 
 #include <vector>
 #include <deque>
@@ -64,18 +65,19 @@ private:
 	std::vector<Menu*> menuList;
 	std::vector<QuickOption*> quickOptions;
 	int activeMenu;
+	int lastRegularMenu;
 	int currentBrush;
 	std::vector<Brush *> brushList;
 	SaveInfo * currentSave;
 	SaveFile * currentFile;
 	Tool * lastTool;
-	Tool ** activeTools;
-	Tool * decoToolset[4];
-	Tool * regularToolset[4];
+	int activeToolset;
+	Tool * toolsets[TS_TOTAL][4];
 	User currentUser;
 	float toolStrength;
 	std::deque<HistoryEntry> history;
 	std::unique_ptr<Snapshot> historyCurrent;
+	bool wasModified;
 	unsigned int historyPosition;
 	unsigned int undoHistoryLimit;
 	bool mouseClickRequired;
@@ -178,15 +180,21 @@ public:
 	int GetBrushID();
 	void SetBrushID(int i);
 
+	bool GetWasModified();
+	void SetWasModified(bool value);
+
 	void SetVote(int direction);
 	SaveInfo * GetSave();
 	SaveFile * GetSaveFile();
 	void SetSave(SaveInfo * newSave, bool invertIncludePressure);
 	void SetSaveFile(SaveFile * newSave, bool invertIncludePressure);
 	void AddObserver(GameView * observer);
+	bool AreParticlesInSubframeOrder();
 
 	void SetPaused(bool pauseState);
 	bool GetPaused();
+	void SetSubframeMode(bool subframeModeState);
+	bool GetSubframeMode();
 	void SetDecoration(bool decorationState);
 	bool GetDecoration();
 	void SetAHeatEnable(bool aHeat);
@@ -201,7 +209,13 @@ public:
 	std::vector<QuickOption*> GetQuickOptions();
 	void SetActiveMenu(int menuID);
 	int GetActiveMenu();
+	void UpdateLastRegularMenu();
+	void RestoreLastRegularMenu();
+	void SetActiveToolset(int toolsetID);
+	int GetActiveToolset();
 	void FrameStep(int frames);
+	void SetSubframeFrameStep(int frames);
+	int GetSubframeFrameStep();
 	User GetUser();
 	void SetUser(User user);
 	Simulation * GetSimulation();

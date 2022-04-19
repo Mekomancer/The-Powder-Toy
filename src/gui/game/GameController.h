@@ -11,8 +11,11 @@
 #include "gui/interface/Point.h"
 #include "gui/interface/Colour.h"
 
+#include "gui/game/Tool.h"
+
 #include "simulation/Sign.h"
 #include "simulation/Particle.h"
+#include "simulation/Sample.h"
 
 #include "Misc.h"
 
@@ -55,6 +58,7 @@ private:
 	std::vector<DebugInfo*> debugInfo;
 	std::unique_ptr<Snapshot> beforeRestore;
 	unsigned int debugFlags;
+	bool autoreloadEnabled;
 	
 	void OpenSaveDone();
 public:
@@ -103,6 +107,8 @@ public:
 	void Update();
 	void SetPaused(bool pauseState);
 	void SetPaused();
+	void SetSubframeMode(bool subframeModeState);
+	void SetSubframeMode();
 	void SetDecoration(bool decorationState);
 	void SetDecoration();
 	void ShowGravityGrid();
@@ -112,8 +118,12 @@ public:
 	bool GetBrushEnable();
 	void SetDebugHUD(bool hudState);
 	bool GetDebugHUD();
+	bool GetParticleDebugEnabled() { return debugFlags & 0x8; }
 	void SetDebugFlags(unsigned int flags) { debugFlags = flags; }
+	bool GetAutoreloadEnabled() { return autoreloadEnabled; }
+	void SetAutoreloadEnabled(bool e) { autoreloadEnabled = e; }
 	void SetActiveMenu(int menuID);
+	void RestoreLastRegularActiveTool();
 	std::vector<Menu*> GetMenuList();
 	int GetNumMenus(bool onlyEnabled);
 	void RebuildFavoritesMenu();
@@ -121,11 +131,20 @@ public:
 	void SetActiveTool(int toolSelection, Tool * tool);
 	void SetActiveTool(int toolSelection, ByteString identifier);
 	void SetLastTool(Tool * tool);
+	SimulationSample * GetSample();
+	int GetParticleDebugPosition();
+	ConfigTool * GetActiveConfigTool();
+	void ToggleConfigTool();
+	int GetStackEditDepth();
+	void SetStackEditDepth(int depth);
+	void AdjustStackEditDepth(int ddepth);
 	int GetReplaceModeFlags();
 	void SetReplaceModeFlags(int flags);
 	void SetActiveColourPreset(int preset);
 	void SetColour(ui::Colour colour);
 	void SetToolStrength(float value);
+	bool GetHasUnsavedChanges();
+	void SetWasModified(bool value);
 	void LoadSaveFile(SaveFile * file);
 	void LoadSave(SaveInfo * save);
 	void OpenSearch(String searchText);
@@ -146,13 +165,20 @@ public:
 	void PlaceSave(ui::Point position);
 	void ClearSim();
 	void ReloadSim();
+	void ReloadParticleOrder();
+	void ReloadParticleOrderIfNeeded();
 	void Vote(int direction);
 	void ChangeBrush();
 	void ShowConsole();
 	void HideConsole();
 	void FrameStep();
+	void SubframeFrameStep();
+	bool IsSubframeFrameStepComplete();
+	bool IsFrameComplete();
+	bool AreParticlesInSubframeOrder();
 	void TranslateSave(ui::Point point);
 	void TransformSave(matrix2d transform);
+	void ReRenderSave();
 	bool MouseInZoom(ui::Point position);
 	ui::Point PointTranslate(ui::Point point);
 	ui::Point NormaliseBlockCoord(ui::Point point);
@@ -160,7 +186,9 @@ public:
 	String BasicParticleInfo(Particle const &sample_part);
 	bool IsValidElement(int type);
 	String WallName(int type);
-	int Record(bool record);
+	int Record(bool record, bool subframe = false);
+	int GetRecordInterval();
+	void SetRecordInterval(int val);
 
 	void ResetAir();
 	void ResetSpark();
@@ -170,6 +198,7 @@ public:
 	bool GetAHeatEnable();
 	void ResetAHeat();
 	void ToggleNewtonianGravity();
+	void ResetStackToolNotifShown();
 
 	bool LoadClipboard();
 	void LoadStamp(GameSave *stamp);

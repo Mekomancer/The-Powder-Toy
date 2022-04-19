@@ -18,6 +18,7 @@
 #include "simulation/BuiltinGOL.h"
 #include "simulation/Simulation.h"
 #include "simulation/SimulationData.h"
+#include "simulation/ElementClasses.h"
 
 #include "graphics/Graphics.h"
 
@@ -44,6 +45,23 @@ void ParseFloatProperty(String value, float &out)
 #endif
 }
 
+bool TryParseHexProperty(String value, int &out)
+{
+	if(value.length() > 2 && value.BeginsWith("0X"))
+	{
+		//0xC0FFEE
+		out = value.Substr(2).ToNumber<unsigned int>(Format::Hex());
+		return true;
+	}
+	else if(value.length() > 1 && value.BeginsWith("#"))
+	{
+		//#C0FFEE
+		out = value.Substr(1).ToNumber<unsigned int>(Format::Hex());
+		return true;
+	}
+	return false;
+}
+
 class PropertyWindow: public ui::Window
 {
 public:
@@ -65,7 +83,41 @@ ui::Window(ui::Point(-1, -1), ui::Point(200, 87)),
 tool(tool_),
 sim(sim_)
 {
-	properties = Particle::GetProperties();
+	std::vector<StructProperty> origProperties = Particle::GetProperties();
+	properties.reserve(origProperties.size());
+	static ByteString firstProperties[] = {
+		"type", "ctype",
+		"life", "temp",
+		"tmp", "tmp2",
+	};
+	int numFirstProperties =
+		sizeof(firstProperties) / sizeof(*firstProperties);
+	for (int i = 0; i < numFirstProperties; i++)
+	{
+		for (int j = 0; j < int(origProperties.size()); j++)
+		{
+			if (origProperties[j].Name == firstProperties[i])
+			{
+				properties.push_back(origProperties[j]);
+				break;
+			}
+		}
+	}
+	for (int i = 0; i < int(origProperties.size()); i++)
+	{
+		bool inFirstProperties = false;
+		for (int j = 0; j < numFirstProperties; j++)
+		{
+			if (origProperties[i].Name == firstProperties[j])
+			{
+				inFirstProperties = true;
+				break;
+			}
+		}
+		if (inFirstProperties)
+			continue;
+		properties.push_back(origProperties[i]);
+	}
 
 	ui::Label * messageLabel = new ui::Label(ui::Point(4, 5), ui::Point(Size.X-8, 14), "Edit property");
 	messageLabel->SetTextColour(style::Colour::InformationTitle);
@@ -122,15 +174,28 @@ void PropertyWindow::SetProperty(bool warn)
 				case StructProperty::ParticleType:
 				{
 					int v;
-					if(value.length() > 2 && value.BeginsWith("0X"))
+					if (TryParseHexProperty(value, v))
 					{
-						//0xC0FFEE
-						v = value.Substr(2).ToNumber<unsigned int>(Format::Hex());
+						// found value, nothing to do
 					}
-					else if(value.length() > 1 && value.BeginsWith("#"))
+					else if(value.length() > 5 && value.BeginsWith("FILT:"))
 					{
-						//#C0FFEE
-						v = value.Substr(1).ToNumber<unsigned int>(Format::Hex());
+						// CRAY(FILT), e.g. filt:5
+						v = value.Substr(5).ToNumber<unsigned int>();
+						v = PMAP(v, PT_FILT);
+					}
+					else if(value.length() > 2 && properties[property->GetOption().second].Name == "ctype" && value.BeginsWith("C:"))
+					{
+						// 30th-bit handling, e.g. C:100
+						if (TryParseHexProperty(value.Substr(2), v))
+						{
+							// found value, nothing to do
+						}
+						else
+						{
+							v = value.Substr(2).ToNumber<int>();
+						}
+						v = (v & 0x3FFFFFFF) | (1<<29);
 					}
 					else
 					{
@@ -229,6 +294,8 @@ void PropertyWindow::SetProperty(bool warn)
 			tool->changeType = properties[property->GetOption().second].Name == "type";
 		} catch (const std::exception& ex) {
 			tool->validProperty = false;
+			Client::Ref().SetPref("Prop.Type", property->GetOption().second);
+			Client::Ref().SetPrefUnicode("Prop.Value", String(""));
 			if (warn)
 				new ErrorMessage("Could not set property", "Invalid value provided");
 			return;
@@ -288,6 +355,10 @@ void PropertyTool::SetProperty(Simulation *sim, ui::Point position)
 			break;
 		case StructProperty::ParticleType:
 		case StructProperty::Integer:
+			if (propOffset == offsetof(Particle, ctype) && (sim->parts[ID(i)].type == PT_FILT || sim->parts[ID(i)].type == PT_BRAY || sim->parts[ID(i)].type == PT_PHOT))
+			{
+				propValue.Integer &= 0x3FFFFFFF;
+			}
 			*((int*)(((char*)&sim->parts[ID(i)])+propOffset)) = propValue.Integer;
 			break;
 		case StructProperty::UInteger:

@@ -83,6 +83,7 @@ GameController::GameController():
 	localBrowser(NULL),
 	options(NULL),
 	debugFlags(0),
+	autoreloadEnabled(0),
 	HasDone(false)
 {
 	gameView = new GameView();
@@ -105,7 +106,7 @@ GameController::GameController():
 	debugInfo.push_back(new DebugParts(0x1, gameModel->GetSimulation()));
 	debugInfo.push_back(new ElementPopulationDebug(0x2, gameModel->GetSimulation()));
 	debugInfo.push_back(new DebugLines(0x4, gameView, this));
-	debugInfo.push_back(new ParticleDebug(0x8, gameModel->GetSimulation(), gameModel));
+	debugInfo.push_back(new ParticleDebug(0x8, gameModel->GetSimulation(), gameModel, this));
 }
 
 GameController::~GameController()
@@ -245,6 +246,8 @@ void GameController::PlaceSave(ui::Point position)
 	if (placeSave)
 	{
 		HistorySnapshot();
+		SetWasModified(true);
+		gameModel->GetSimulation()->needReloadParticleOrder = true;
 		if (!gameModel->GetSimulation()->Load(placeSave, !gameView->ShiftBehaviour(), position.X, position.Y))
 		{
 			gameModel->SetPaused(placeSave->paused | gameModel->GetPaused());
@@ -381,7 +384,9 @@ void GameController::DrawRect(int toolSelection, ui::Point point1, ui::Point poi
 	if(!activeTool || !cBrush)
 		return;
 	activeTool->SetStrength(1.0f);
+	sim->BeforeStackEdit();
 	activeTool->DrawRect(sim, cBrush, point1, point2);
+	sim->AfterStackEdit();
 }
 
 void GameController::DrawLine(int toolSelection, ui::Point point1, ui::Point point2)
@@ -393,7 +398,9 @@ void GameController::DrawLine(int toolSelection, ui::Point point1, ui::Point poi
 	if(!activeTool || !cBrush)
 		return;
 	activeTool->SetStrength(1.0f);
+	sim->BeforeStackEdit();
 	activeTool->DrawLine(sim, cBrush, point1, point2);
+	sim->AfterStackEdit();
 }
 
 void GameController::DrawFill(int toolSelection, ui::Point point)
@@ -405,7 +412,9 @@ void GameController::DrawFill(int toolSelection, ui::Point point)
 	if(!activeTool || !cBrush)
 		return;
 	activeTool->SetStrength(1.0f);
+	sim->BeforeStackEdit();
 	activeTool->DrawFill(sim, cBrush, point);
+	sim->AfterStackEdit();
 }
 
 void GameController::DrawPoints(int toolSelection, ui::Point oldPos, ui::Point newPos, bool held)
@@ -420,10 +429,22 @@ void GameController::DrawPoints(int toolSelection, ui::Point oldPos, ui::Point n
 	}
 
 	activeTool->SetStrength(gameModel->GetToolStrength());
+	if ((GetReplaceModeFlags() & STACK_MODE) && held)
+	{
+		if (oldPos != newPos)
+		{
+			sim->BeforeStackEdit();
+			activeTool->Draw(sim, cBrush, newPos);
+			sim->AfterStackEdit();
+		}
+		return;
+	}
+	sim->BeforeStackEdit();
 	if (!held)
 		activeTool->Draw(sim, cBrush, newPos);
 	else
 		activeTool->DrawLine(sim, cBrush, oldPos, newPos, true);
+	sim->AfterStackEdit();
 }
 
 bool GameController::LoadClipboard()
@@ -459,6 +480,12 @@ void GameController::TransformSave(matrix2d transform)
 	vector2d translate = v2d_zero;
 	gameModel->GetPlaceSave()->Transform(transform, translate);
 	gameModel->SetPlaceSave(gameModel->GetPlaceSave());
+}
+
+void GameController::ReRenderSave()
+{
+	if (gameView->GetSelectMode() == SelectMode::PlaceSave)
+		gameView->NotifyPlaceSaveChanged(gameModel);
 }
 
 void GameController::ToolClick(int toolSelection, ui::Point point)
@@ -618,31 +645,28 @@ bool GameController::KeyPress(int key, int scan, bool repeat, bool shift, bool c
 	bool ret = commandInterface->HandleEvent(LuaEvents::keypress, &ev);
 	if (repeat)
 		return ret;
-	if (ret)
+	if (ret && !gameView->GetPlacingSave())
 	{
 		Simulation * sim = gameModel->GetSimulation();
-		if (!gameView->GetPlacingSave())
+		// Go right command
+		if (key == SDLK_RIGHT)
 		{
-			// Go right command
-			if (key == SDLK_RIGHT)
-			{
-				sim->player.comm = (int)(sim->player.comm)|0x02;
-			}
-			// Go left command
-			else if (key == SDLK_LEFT)
-			{
-				sim->player.comm = (int)(sim->player.comm)|0x01;
-			}
-			// Use element command
-			else if (key == SDLK_DOWN && ((int)(sim->player.comm)&0x08)!=0x08)
-			{
-				sim->player.comm = (int)(sim->player.comm)|0x08;
-			}
-			// Jump command
-			else if (key == SDLK_UP && ((int)(sim->player.comm)&0x04)!=0x04)
-			{
-				sim->player.comm = (int)(sim->player.comm)|0x04;
-			}
+			sim->player.comm = (int)(sim->player.comm)|0x02;
+		}
+		// Go left command
+		else if (key == SDLK_LEFT)
+		{
+			sim->player.comm = (int)(sim->player.comm)|0x01;
+		}
+		// Use element command
+		else if (key == SDLK_DOWN && ((int)(sim->player.comm)&0x08)!=0x08)
+		{
+			sim->player.comm = (int)(sim->player.comm)|0x08;
+		}
+		// Jump command
+		else if (key == SDLK_UP && ((int)(sim->player.comm)&0x04)!=0x04)
+		{
+			sim->player.comm = (int)(sim->player.comm)|0x04;
 		}
 
 		// Go right command
@@ -674,9 +698,19 @@ bool GameController::KeyPress(int key, int scan, bool repeat, bool shift, bool c
 				SwitchGravity();
 				break;
 			case SDL_SCANCODE_D:
+				if (shift)
+				{
+					gameView->ToggleStackMode();
+					break;
+				}
 				gameView->SetDebugHUD(!gameView->GetDebugHUD());
 				break;
 			case SDL_SCANCODE_S:
+				if (shift)
+				{
+					SetActiveTool(0, "DEFAULT_UI_STACK");
+					break;
+				}
 				gameView->BeginStampSelection();
 				break;
 			}
@@ -869,6 +903,11 @@ void GameController::ToggleNewtonianGravity()
 	gameModel->SetNewtonianGravity(!gameModel->GetNewtonianGrvity());
 }
 
+void GameController::ResetStackToolNotifShown()
+{
+	gameModel->GetSimulation()->stackToolNotifShown = false;
+}
+
 void GameController::LoadRenderPreset(int presetNum)
 {
 	Renderer * renderer = gameModel->GetRenderer();
@@ -877,24 +916,43 @@ void GameController::LoadRenderPreset(int presetNum)
 	renderer->SetRenderMode(preset.RenderModes);
 	renderer->SetDisplayMode(preset.DisplayModes);
 	renderer->SetColourMode(preset.ColourMode);
+	ReRenderSave();
 }
 
 void GameController::Update()
 {
-	ui::Point pos = gameView->GetMousePosition();
-	gameModel->GetRenderer()->mousePos = PointTranslate(pos);
-	if (pos.X < XRES && pos.Y < YRES)
-		gameView->SetSample(gameModel->GetSimulation()->GetSample(PointTranslate(pos).X, PointTranslate(pos).Y));
-	else
-		gameView->SetSample(gameModel->GetSimulation()->GetSample(pos.X, pos.Y));
-
 	Simulation * sim = gameModel->GetSimulation();
+
+	if (!sim->sys_pause || sim->framerender)
+	{
+		if (GetAutoreloadEnabled() && sim->needReloadParticleOrder)
+		{
+			ReloadParticleOrder();
+		}
+	}
+
 	sim->BeforeSim();
 	if (!sim->sys_pause || sim->framerender)
 	{
 		sim->UpdateParticles(0, NPART);
 		sim->AfterSim();
+		sim->subframe_mode = false;
 	}
+	if (sim->subframe_mode)
+	{
+		for (std::vector<DebugInfo*>::iterator iter = debugInfo.begin(), end = debugInfo.end(); iter != end; iter++)
+		{
+			if ((*iter)->debugID == 0x8)
+				((ParticleDebug*)*iter)->UpdateSimUpToInterestingChange();
+		}
+	}
+
+	ui::Point pos = gameView->GetMousePosition();
+	gameModel->GetRenderer()->mousePos = PointTranslate(pos);
+	if (pos.X < XRES && pos.Y < YRES)
+		sim->UpdateSample(PointTranslate(pos).X, PointTranslate(pos).Y);
+	else
+		sim->UpdateSample(pos.X, pos.Y);
 
 	//if either STKM or STK2 isn't out, reset it's selected element. Defaults to PT_DUST unless right selected is something else
 	//This won't run if the stickmen dies in a frame, since it respawns instantly
@@ -915,6 +973,11 @@ void GameController::Update()
 		if (!sim->player2.spwn)
 			Element_STKM_set_element(sim, &sim->player2, rightSelected);
 	}
+
+	ConfigTool * configTool = GetActiveConfigTool();
+	if (configTool)
+		configTool->Update(sim);
+
 	if(renderOptions && renderOptions->HasExited)
 	{
 		delete renderOptions;
@@ -956,6 +1019,16 @@ void GameController::SetToolStrength(float value)
 	gameModel->SetToolStrength(value);
 }
 
+bool GameController::GetHasUnsavedChanges()
+{
+	return gameModel->GetSaveFile() && gameModel->GetWasModified();
+}
+
+void GameController::SetWasModified(bool value)
+{
+	gameModel->SetWasModified(value);
+}
+
 void GameController::SetZoomPosition(ui::Point position)
 {
 	ui::Point zoomPosition = position-(gameModel->GetZoomSize()/2);
@@ -984,6 +1057,16 @@ void GameController::SetPaused(bool pauseState)
 void GameController::SetPaused()
 {
 	gameModel->SetPaused(!gameModel->GetPaused());
+}
+
+void GameController::SetSubframeMode(bool subframeModeState)
+{
+	gameModel->SetSubframeMode(subframeModeState);
+}
+
+void GameController::SetSubframeMode()
+{
+	gameModel->SetSubframeMode(!gameModel->GetSubframeMode());
 }
 
 void GameController::SetDecoration(bool decorationState)
@@ -1047,9 +1130,21 @@ void GameController::SetActiveMenu(int menuID)
 {
 	gameModel->SetActiveMenu(menuID);
 	if(menuID == SC_DECO)
-		gameModel->SetColourSelectorVisibility(true);
+	{
+		gameModel->SetActiveToolset(TS_DECO);
+	}
 	else
-		gameModel->SetColourSelectorVisibility(false);
+	{
+		if (gameModel->GetActiveToolset() == TS_DECO)
+			gameModel->SetActiveToolset(TS_REGULAR);
+	}
+	gameModel->UpdateLastRegularMenu();
+}
+
+void GameController::RestoreLastRegularActiveTool()
+{
+	gameModel->SetActiveToolset(TS_REGULAR);
+	gameModel->RestoreLastRegularMenu();
 }
 
 std::vector<Menu*> GameController::GetMenuList()
@@ -1084,6 +1179,14 @@ Tool * GameController::GetActiveTool(int selection)
 
 void GameController::SetActiveTool(int toolSelection, Tool * tool)
 {
+	if(tool->GetIdentifier() == "DEFAULT_UI_CONFIG")
+	{
+		((ConfigTool *)tool)->Reset(gameModel->GetSimulation());
+		toolSelection = 0;
+		gameModel->SetActiveMenu(SC_TOOL);
+	}
+	if (tool->GetIdentifier() == "DEFAULT_UI_STACK")
+		SetActiveMenu(SC_TOOL);
 	if (gameModel->GetActiveMenu() == SC_DECO && toolSelection == 2)
 		toolSelection = 0;
 	gameModel->SetActiveTool(toolSelection, tool);
@@ -1115,6 +1218,56 @@ void GameController::SetActiveTool(int toolSelection, ByteString identifier)
 void GameController::SetLastTool(Tool * tool)
 {
 	gameModel->SetLastTool(tool);
+}
+
+SimulationSample * GameController::GetSample()
+{
+	return &gameModel->GetSimulation()->sample;
+}
+
+int GameController::GetParticleDebugPosition()
+{
+	return gameModel->GetSimulation()->debug_currentParticle;
+}
+
+ConfigTool * GameController::GetActiveConfigTool()
+{
+	Tool * t = GetActiveTool(0);
+	if(t->GetIdentifier() == "DEFAULT_UI_CONFIG")
+		return (ConfigTool*)t;
+	else return NULL;
+}
+
+void GameController::ToggleConfigTool()
+{
+	if (gameModel->GetActiveToolset() == TS_CONFIG)
+		RestoreLastRegularActiveTool();
+	else
+		SetActiveTool(0, "DEFAULT_UI_CONFIG");
+}
+
+int GameController::GetStackEditDepth()
+{
+	return gameModel->GetSimulation()->stackEditDepth;
+}
+
+void GameController::SetStackEditDepth(int depth)
+{
+	gameModel->GetSimulation()->stackEditDepth = depth;
+}
+
+void GameController::AdjustStackEditDepth(int ddepth)
+{
+	int stackSize = GetSample()->SParticleCount;
+	int currDepth = GetStackEditDepth();
+	if (currDepth >= stackSize)
+		currDepth = stackSize - 1;
+	int newDepth = currDepth + ddepth;
+	if (newDepth < -1)
+		newDepth = -1;
+	if (newDepth >= stackSize)
+		newDepth = stackSize - 1;
+	SetStackEditDepth(newDepth);
 }
 
 int GameController::GetReplaceModeFlags()
@@ -1194,10 +1347,27 @@ void GameController::OpenLocalSaveWindow(bool asCurrent)
 		}
 		else if (gameModel->GetSaveFile())
 		{
+			std::string filename = gameModel->GetSaveFile()->GetName();
+			if (GetAutoreloadEnabled() && Platform::FileExists(filename))
+			{
+				try
+				{
+					std::vector<unsigned char> data = Client::Ref().ReadFile(filename);
+					if (data.size() > 0)
+					{
+						Client::Ref().WriteFile(data, filename + std::string(".backup"));
+					}
+				}
+				catch(std::exception & e)
+				{
+					new ErrorMessage("Error", "Unable to make backup.");
+				}
+			}
+
 			Json::Value localSaveInfo;
 			localSaveInfo["type"] = "localsave";
 			localSaveInfo["username"] = Client::Ref().GetAuthUser().Username;
-			localSaveInfo["title"] = gameModel->GetSaveFile()->GetName();
+			localSaveInfo["title"] = filename;
 			localSaveInfo["date"] = (Json::Value::UInt64)time(NULL);
 			Client::Ref().SaveAuthorInfo(&localSaveInfo);
 			gameSave->authors = localSaveInfo;
@@ -1207,7 +1377,7 @@ void GameController::OpenLocalSaveWindow(bool asCurrent)
 			std::vector<char> saveData = gameSave->Serialise();
 			if (saveData.size() == 0)
 				new ErrorMessage("Error", "Unable to serialize game data.");
-			else if (Client::Ref().WriteFile(saveData, gameModel->GetSaveFile()->GetName()))
+			else if (Client::Ref().WriteFile(saveData, filename))
 				new ErrorMessage("Error", "Unable to write save file.");
 			else
 				gameModel->SetInfoTip("Saved Successfully");
@@ -1461,6 +1631,27 @@ void GameController::FrameStep()
 	gameModel->SetPaused(true);
 }
 
+void GameController::SubframeFrameStep()
+{
+	gameModel->SetSubframeFrameStep(1);
+	gameModel->SetSubframeMode(true);
+}
+
+bool GameController::IsSubframeFrameStepComplete()
+{
+	return gameModel->GetSubframeFrameStep() == 0;
+}
+
+bool GameController::IsFrameComplete()
+{
+	return gameModel->GetSimulation()->debug_currentParticle == 0;
+}
+
+bool GameController::AreParticlesInSubframeOrder()
+{
+	return gameModel->AreParticlesInSubframeOrder();
+}
+
 void GameController::Vote(int direction)
 {
 	if(gameModel->GetSave() && gameModel->GetUser().UserID && gameModel->GetSave()->GetID() && gameModel->GetSave()->GetVote()==0)
@@ -1525,6 +1716,20 @@ void GameController::ReloadSim()
 	}
 }
 
+void GameController::ReloadParticleOrder()
+{
+	gameModel->GetSimulation()->ReloadParticleOrder();
+
+	String logmessage = String::Build("Particle order reloaded");
+	gameModel->Log(logmessage, false);
+}
+
+void GameController::ReloadParticleOrderIfNeeded()
+{
+	if (!IsFrameComplete() || !AreParticlesInSubframeOrder())
+		ReloadParticleOrder();
+}
+
 bool GameController::IsValidElement(int type)
 {
 	if (gameModel && gameModel->GetSimulation())
@@ -1543,9 +1748,19 @@ String GameController::WallName(int type)
 		return String();
 }
 
-int GameController::Record(bool record)
+int GameController::Record(bool record, bool subframe)
 {
-	return gameView->Record(record);
+	return gameView->Record(record, subframe);
+}
+
+int GameController::GetRecordInterval()
+{
+	return gameView->GetRecordInterval();
+}
+
+void GameController::SetRecordInterval(int val)
+{
+	gameView->SetRecordInterval(val);
 }
 
 void GameController::NotifyAuthUserChanged(Client * sender)

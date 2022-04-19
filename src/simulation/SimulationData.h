@@ -25,6 +25,11 @@
 #define SC_CRACKER2 17
 #define SC_TOTAL 16
 
+#define TS_REGULAR 0
+#define TS_DECO 1
+#define TS_CONFIG 2
+#define TS_TOTAL 3
+
 #define O_WL_WALLELEC	122
 #define O_WL_EWALL		123
 #define O_WL_DETECT		124
@@ -133,6 +138,7 @@
 //replace mode / specific delete flags
 #define REPLACE_MODE 0x1
 #define SPECIFIC_DELETE 0x2
+#define STACK_MODE 0x4
 
 struct part_type;
 struct part_transition;
